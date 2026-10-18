@@ -18,7 +18,7 @@ pi install ./plugins/prompt-prefix
 
 ```json
 {
-  "packages": ["/absolute/path/to/pi-plugins/plugins/prompt-prefix"],
+  "packages": ["/absolute/path/to/pi-extensions/plugins/prompt-prefix"],
   "editorPaddingX": 2
 }
 ```

@@ -1,5 +1,5 @@
 {
-  "name": "pi-plugins",
+  "name": "pi-extensions",
   "version": "0.2.0",
   "private": true,
   "type": "module",
@@ -7,7 +7,7 @@
   "keywords": ["pi-package"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/luckfunc/pi-plugins.git"
+    "url": "https://github.com/luckfunc/pi-extensions.git"
   },
   "pi": {
     "extensions": [

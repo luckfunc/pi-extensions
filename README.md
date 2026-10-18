@@ -1,4 +1,4 @@
-# pi-plugins
+# pi-extensions
 
 Pi 插件集合。
 
@@ -8,7 +8,7 @@ Pi 插件集合。
 ## 安装
 
 ```sh
-pi install git:github.com/luckfunc/pi-plugins
+pi install git:github.com/luckfunc/pi-extensions
 ```
 
 已有会话执行 `/reload`。输入 `/pstack` 启用 pstack，输入 `/pstack off` 关闭。
