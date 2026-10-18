@@ -1,4 +1,4 @@
-// Adds "> " prefix to the input editor
+// Adds "❯ " prefix to the input editor
 
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
 
@@ -13,7 +13,7 @@ class PromptEditor extends CustomEditor {
 
       // Check if this looks like a content line (starts with spaces = padding)
       if (line.startsWith("  ")) {
-        // First content line gets colored "> "
+        // First content line gets colored "❯ "
         if (i === 1) {
           return "\x1b[1;36m❯\x1b[0m " + line.slice(2);
         }

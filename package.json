@@ -1,18 +1,23 @@
 {
-  "name": "pi-prompt-prefix",
-  "version": "0.1.0",
+  "name": "pi-plugins",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Pi extension that adds a colored prompt prefix to the input editor.",
-  "keywords": [
-    "pi-package"
-  ],
+  "description": "Pi plugins: a colored input prefix and pstack engineering workflows.",
+  "keywords": ["pi-package"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/luckfunc/pi-plugins.git"
+  },
   "pi": {
     "extensions": [
-      "./extensions/prompt-prefix.js"
-    ]
+      "./plugins/prompt-prefix/extensions/prompt-prefix.js",
+      "./plugins/pstack/extensions/pstack-mode.ts"
+    ],
+    "skills": ["./plugins/pstack/skills"]
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
   }
 }
