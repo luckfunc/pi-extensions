@@ -80,16 +80,16 @@ task({ prompt, agent?, model?, role?, readonly?, cwd?, timeoutSec? })
 
 ```text
 extensions/pstack-mode.ts   sticky mode, /pstack, task tool
-skills/                     54 ported skills, unchanged apart from frontmatter
+skills/                     ported skills, unchanged apart from frontmatter
 roles/                      delegate briefs for the task tool
 PORTING.md                  what changed from upstream, and the gaps
 ```
 
 ## Updating from upstream
 
-Review the upstream diff and copy only the changed files. Keep the pi-specific `setup-pstack` and role briefs. Record the upstream commit in `.upstream-rev`, then run `/reload`.
+Run `bash scripts/sync-upstream.sh` from this package directory, then review the upstream diff. The script preserves the pi-specific `setup-pstack` and both adapted role briefs, normalizes skill frontmatter, removes obsolete upstream skills, and records the upstream commit in `.upstream-rev`. Reconcile upstream changes to the preserved files by hand; run `/reload` only after reviewing and installing the update.
 
-Do not run `scripts/sync-upstream.sh` without fixing its cleanup first. It deletes the skills directory before skipping `setup-pstack`, so that pi-specific skill is lost. It also overwrites the adapted role briefs.
+Run the offline sync regression check with `python3 scripts/test-sync-upstream.py`.
 
 ## Credits
 

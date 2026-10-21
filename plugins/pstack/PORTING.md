@@ -1,6 +1,6 @@
 # Porting notes
 
-Upstream: `cursor/plugins` → `pstack`, commit `101b274dd991f694e1f7024be2157e5f3adf07de` (2026-10-16), pstack `0.15.25`.
+Upstream: `cursor/plugins` → `pstack`, commit `190d28736eff128ec94f502a22c7fe0c4b56cd37` (2026-10-20), pstack `0.15.29`.
 
 ## What changed
 
@@ -18,7 +18,7 @@ Upstream: `cursor/plugins` → `pstack`, commit `101b274dd991f694e1f7024be2157e5
 | `/setup-pstack` | Cursor-specific, writes the mdc rule | Rewritten for pi: detects models with `pi --list-models`, writes the JSON config. This is the one skill whose body was replaced; it is excluded from `scripts/sync-upstream.sh` |
 | `deslop`, `control-cli`, `control-ui` | shipped by the separate `cursor-team-kit` plugin | Not installed. The injected harness adapter tells the model to skip those steps |
 
-Everything else, meaning every principle, playbook, review rubric, and prompt template, is byte-identical to upstream apart from the frontmatter normalization. Cursor references inside those files are handled at runtime by the adapter block the extension prepends to the injected mode section, not by editing 54 skills.
+Everything else, meaning every principle, playbook, review rubric, and prompt template, is byte-identical to upstream apart from the frontmatter normalization. Cursor references inside those files are handled at runtime by the adapter block the extension prepends to the injected mode section, not by editing every skill.
 
 ## Known gaps
 
@@ -34,4 +34,13 @@ Everything else, meaning every principle, playbook, review rubric, and prompt te
 ./scripts/sync-upstream.sh v0.16.0    # a tag or branch
 ```
 
-The script re-copies `skills/` (minus `setup-pstack`) and `roles/`, re-applies the frontmatter rules, and records the upstream commit in `.upstream-rev`. Re-read `skills/setup-pstack/SKILL.md` and the role briefs after a sync, since those are hand-maintained.
+The script re-copies upstream skills and roles, re-applies the frontmatter rules, and records the upstream commit in `.upstream-rev`. It preserves `skills/setup-pstack/`, `roles/poteto-agent.md`, and `roles/comment-sicko.md` byte-for-byte. Review their upstream diffs manually after each sync; new upstream roles are copied and obsolete non-preserved roles are removed.
+
+## 0.15.29 sync review
+
+- Added `create-formal-verification-skill` and `maintain-formal-verification-skill`; no skills removed.
+- `sharpen` now returns a rewritten prompt instead of doing the task. `ketchup` lists every pending decision with evidence and risk. Help and recipes cover the new verification skills.
+- Upstream normalized the names of `poteto-mode` and `make-bot-ui`, and tightened branded-type examples. These already match this port after normalization / existing updates.
+- The upstream role briefs did not change; retain both Pi adaptations.
+- Upstream setup now offers formal verification as an optional final step. This port intentionally leaves `setup-pstack` unchanged: invoke `/skill:create-formal-verification-skill` explicitly instead. Model detection, budget mapping, and `~/.pi/agent/pstack-models.json` remain Pi-specific.
+- Cursor manifests, automations, and upstream guides (including the Claude Code adapter) are not imported. Help still describes those harnesses and links to unbundled guides; use this README and PORTING notes for Pi installation and model configuration.
