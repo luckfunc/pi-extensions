@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Re-copy pstack skills from cursor/plugins and re-apply the pi frontmatter rules.
-# Roles are copied to roles/ with the same names the extension expects.
+# Roles are copied to roles/; the two pi-adapted briefs are hand maintained.
 # setup-pstack is pi-specific and is NOT overwritten; review it by hand after a sync.
 set -euo pipefail
 
@@ -23,11 +23,19 @@ skills_src = os.path.join(src, "skills")
 skills_dst = os.path.join(pkg, "skills")
 roles_dst = os.path.join(pkg, "roles")
 
-for dst in (skills_dst, roles_dst):
-    if os.path.isdir(dst):
-        shutil.rmtree(dst)
-
 skip = {"setup-pstack"}  # pi-specific, hand maintained
+role_skip = {"poteto-agent.md", "comment-sicko.md"}  # pi-adapted briefs
+for dst, preserved in ((skills_dst, skip), (roles_dst, role_skip)):
+    os.makedirs(dst, exist_ok=True)
+    for name in os.listdir(dst):
+        if name in preserved:
+            continue
+        target = os.path.join(dst, name)
+        if os.path.isdir(target) and not os.path.islink(target):
+            shutil.rmtree(target)
+        else:
+            os.unlink(target)
+
 for name in sorted(os.listdir(skills_src)):
     source = os.path.join(skills_src, name)
     if not os.path.isdir(source) or name in skip:
@@ -55,11 +63,11 @@ for name in sorted(os.listdir(skills_src)):
 agents_src = os.path.join(src, "agents")
 os.makedirs(roles_dst, exist_ok=True)
 for name in sorted(os.listdir(agents_src)):
-    if name.endswith(".md"):
+    if name.endswith(".md") and name not in role_skip:
         shutil.copy2(os.path.join(agents_src, name), os.path.join(roles_dst, name))
 PY
 
 printf '%s\n' "$COMMIT" > "$PKG/.upstream-rev"
 echo "synced pstack@${COMMIT%% *}"
-echo "review roles/poteto-agent.md and roles/comment-sicko.md for cursor-specific wording,"
-echo "and skills/setup-pstack/SKILL.md (excluded from the sync) before committing."
+echo "review upstream changes to roles/poteto-agent.md, roles/comment-sicko.md,"
+echo "and skills/setup-pstack/SKILL.md (all preserved, not synced) before committing."
