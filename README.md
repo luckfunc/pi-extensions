@@ -34,4 +34,4 @@ pi install ./plugins/pstack
 
 全量安装和单独安装二选一，避免重复加载。单独安装后请保留克隆的目录，Pi 直接从该目录加载插件。
 
-已有会话执行 `/reload`。输入 `/pstack` 启用 pstack，输入 `/pstack off` 关闭。
+已有会话执行 `/reload`。输入 `/pstack` 切换 pstack 开关，输入 `/pstack on` 启用，输入 `/pstack off` 关闭。

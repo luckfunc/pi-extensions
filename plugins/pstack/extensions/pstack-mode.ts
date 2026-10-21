@@ -5,7 +5,7 @@
  * and this extension adds what cursor's "custom mode" + Task subagents gave the
  * agent for free.
  *
- *   /pstack              turn poteto mode on for this session (sticky)
+ *   /pstack              toggle poteto mode on/off for this session (sticky)
  *   /pstack off          turn it off
  *   /pstack status       report state
  *   /pstack <task>       turn it on, then send <task>
@@ -284,13 +284,19 @@ export default function pstackExtension(pi: ExtensionAPI) {
 		const raw = args.trim();
 		const word = raw.toLowerCase();
 
+		if (word === "") {
+			setMode(!modeOn, ctx);
+			ctx.ui.notify(`pstack: ${modeOn ? "on" : "off"}`, "info");
+			return;
+		}
+
 		if (word === "off") {
 			setMode(false, ctx);
 			ctx.ui.notify("pstack off", "info");
 			return;
 		}
 
-		if (word === "status" || word === "on" || word === "") {
+		if (word === "status" || word === "on") {
 			if (word !== "status" && !modeOn) setMode(true, ctx);
 			const root = resolveRoot();
 			const models = readModels();
@@ -303,9 +309,6 @@ export default function pstackExtension(pi: ExtensionAPI) {
 				].join("\n"),
 				modeOn ? "info" : "warning",
 			);
-			if (word === "" && modeOn) {
-				ctx.ui.notify("Mode stays on for every turn. Type your task, or /pstack <task>. /pstack off to stop.", "info");
-			}
 			return;
 		}
 
@@ -324,13 +327,13 @@ export default function pstackExtension(pi: ExtensionAPI) {
 	};
 
 	pi.registerCommand("pstack", {
-		description: "Turn poteto mode (pstack) on for this session; pass a task to start it",
+		description: "Toggle poteto mode (pstack) on/off for this session; pass a task to start it",
 		getArgumentCompletions: completions,
 		handler: activate,
 	});
 
 	pi.registerCommand("poteto-mode", {
-		description: "Alias for /pstack: sticky poteto mode, optionally followed by the task",
+		description: "Alias for /pstack: toggle sticky poteto mode on/off, or pass a task to start it",
 		getArgumentCompletions: completions,
 		handler: activate,
 	});

@@ -25,7 +25,7 @@ That writes `~/.pi/agent/pstack-models.json`, which decides the model per role. 
 ## Use
 
 ```text
-/pstack                     turn poteto mode on for this session
+/pstack                     toggle poteto mode on/off for this session
 /poteto-mode                same thing, if that name is muscle memory
 /pstack fix the scroll drift, repro first
 /pstack off                 turn it off
