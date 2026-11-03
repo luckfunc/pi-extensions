@@ -19,7 +19,8 @@
  * child in the current repo, optionally with a pstack role brief and model.
  */
 
-import { spawn } from "node:child_process";
+import { TaskManager, type TaskResult } from "./task-manager.ts";
+import { matchesKey } from "@earendil-works/pi-tui";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -153,7 +154,7 @@ function harnessAdapter(root: string, models: PstackModels): string {
 This skill was written for cursor. On pi these substitutions are already wired up. Apply them wherever the text says otherwise.
 
 - **Subagents.** Cursor's \`Task\` tool is the \`task\` tool here. Call \`task({ prompt, agent, model, role, readonly })\`. Each call runs an independent headless pi child in the repo, so it really is a fresh delegate with its own context.
-- **Parallelism.** Cursor's \`run_in_background: true\` does not exist. Fire several \`task\` calls in one assistant message and pi runs them concurrently. That is also how \`swarm\`, \`arena\`, \`interrogate\`, and \`reflect\` fan out.
+- **Parallelism.** Tasks default to \`run_in_background: true\`: return a task ID immediately, then deliver the final report automatically. Continue independent work; do not busy-poll. Use \`task_status({task_id})\` to inspect and \`task_cancel({task_id})\` to stop (or task_id \"all\"). Set \`run_in_background: false\` only when this call must wait.
 - **Resuming a delegate.** Sessions are not kept between \`task\` calls, so every delegate is fresh. Follow the fresh-subagent rule in the skill: consolidate the brief instead of resuming.
 - **Agent roles.** \`agent\` names a brief in \`${rolesRoot}\` and prepends it to the prompt: \`poteto-agent\` for code delegates, \`comment-sicko\` for \`/skill:no-comments\`. Omit \`agent\` for skill-specific reviewers that prescribe their own prompt.
 - **Asking the operator.** There is no \`AskQuestion\`. Ask in plain text, one question, or use \`ctx.ui\`-backed slash commands when a real choice is needed. The never-block-on-the-human rule still applies.
@@ -207,6 +208,32 @@ export default function pstackExtension(pi: ExtensionAPI) {
 	let cachedRoot: string | undefined;
 
 	const isChild = process.env.PI_PSTACK_CHILD === "1";
+	const tasks = new TaskManager();
+	let removeInputListener: (() => void) | undefined;
+	let sessionGeneration = 0;
+	let closing = false;
+	const taskText = (task: TaskResult) => {
+		const seconds = (((task.ended ?? Date.now()) - task.started) / 1000).toFixed(1);
+		return truncate(`task ${task.id} · ${task.label} · ${task.state} · ${seconds}s${task.error ? ` · ${task.error}` : ""}\n\n${task.stdout.trim() || task.stderr.trim() || "(no output)"}`);
+	};
+	const taskReply = (task: TaskResult) => ({
+		content: [{ type: "text" as const, text: taskText(task) }],
+		details: { ...task, stdout: undefined, stderr: undefined },
+		isError: ["failed", "cancelled", "timed_out"].includes(task.state),
+	});
+	const paintTasks = (ctx: ExtensionContext) => {
+		const active = tasks.active();
+		ctx.ui.setStatus("pstack-tasks", active.length ? `pstack: ${active.length} active · Esc stops tasks · /tasks` : undefined);
+	};
+	const closeTasks = async () => {
+		closing = true;
+		sessionGeneration++;
+		removeInputListener?.();
+		removeInputListener = undefined;
+		await tasks.cancelAll();
+		tasks.clear();
+	};
+	pi.on("session_shutdown", closeTasks);
 
 	pi.registerFlag("pstack", {
 		description: "Start with poteto mode (pstack) on for this session",
@@ -246,6 +273,18 @@ export default function pstackExtension(pi: ExtensionAPI) {
 	}
 
 	pi.on("session_start", async (_event, ctx) => {
+		await closeTasks();
+		closing = false;
+		if (!isChild && ctx.mode === "tui") {
+			removeInputListener = ctx.ui.onTerminalInput((data) => {
+				if (matchesKey(data, "escape") && tasks.active().length) {
+					void tasks.cancelAll().then(() => paintTasks(ctx));
+					paintTasks(ctx);
+				}
+				return undefined; // Keep Pi's native Esc handling and queued-message restoration.
+			});
+		}
+		paintTasks(ctx);
 		let restored: boolean | undefined;
 		for (const entry of ctx.sessionManager.getBranch()) {
 			if (entry.type === "custom" && entry.customType === MODE_ENTRY) {
@@ -339,11 +378,57 @@ export default function pstackExtension(pi: ExtensionAPI) {
 	});
 
 	if (!isChild) {
+		pi.registerCommand("tasks", {
+			description: "List pstack tasks, show <id>, or cancel <id|all>",
+			handler: async (args, ctx) => {
+				const [action, id] = args.trim().split(/\s+/);
+				if (action === "cancel") {
+					if (id === "all") await tasks.cancelAll();
+					else {
+						const task = id ? tasks.get(id) : undefined;
+						if (!task) { ctx.ui.notify("Unknown task. Use /tasks to list IDs.", "error"); return; }
+						task.cancel();
+						await task.done;
+					}
+					paintTasks(ctx);
+					ctx.ui.notify("Task cancellation finished. Use /tasks to inspect results.", "info");
+				} else if (action) {
+					const task = tasks.get(action);
+					ctx.ui.notify(task ? taskText(task.result) : "Unknown task. Use /tasks to list IDs.", task ? "info" : "error");
+				} else {
+					ctx.ui.notify(tasks.list().map(task => `${task.id} · ${task.state} · ${task.label}`).join("\n") || "No tasks in this session.", "info");
+				}
+			},
+		});
+		pi.registerTool({
+			name: "task_status", label: "Task status",
+			description: "List pstack tasks or read the current output/final result for task_id. Background completion is delivered automatically; do not busy-poll.",
+			parameters: Type.Object({ task_id: Type.Optional(Type.String()) }),
+			execute: async (_id, params) => {
+				const task = params.task_id ? tasks.get(params.task_id) : undefined;
+				if (task) return taskReply(task.result);
+				return { content: [{ type: "text", text: params.task_id ? "Unknown task ID" : JSON.stringify(tasks.list().map(({ id, label, state }) => ({ id, label, state }))) }], details: {}, isError: !!params.task_id };
+			},
+		});
+		pi.registerTool({
+			name: "task_cancel", label: "Cancel task",
+			description: "Cancel one pstack task by task_id, or all active tasks with task_id=all. Waits for bounded process cleanup.",
+			parameters: Type.Object({ task_id: Type.String() }),
+			execute: async (_id, params, _signal, _update, ctx) => {
+				if (params.task_id === "all") { await tasks.cancelAll(); paintTasks(ctx); return { content: [{ type: "text", text: "Cancellation finished; inspect task_status for results and cleanup errors." }], details: {} }; }
+				const task = tasks.get(params.task_id);
+				if (!task) return { content: [{ type: "text", text: "Unknown task ID" }], details: {}, isError: true };
+				task.cancel();
+				await task.done;
+				paintTasks(ctx);
+				return taskReply(task.result);
+			},
+		});
 		pi.registerTool({
 			name: "task",
 			label: "Task subagent",
 			description:
-				"Spawn a fresh headless pi subagent to do one job and return its report. This is pstack's replacement for cursor's Task tool: each call gets its own context, its own model, and writes no shared session. Call it several times in one message to fan out in parallel (swarm, arena, interrogate, reflect). Give it a complete brief, file pointers instead of pasted context, and a report format.",
+				"Spawn a fresh Pi subagent. Defaults to background execution: returns task_id immediately and delivers the final report automatically. Use task_status to inspect and task_cancel to stop. Set run_in_background=false to wait in this call. Give a self-contained brief.",
 			promptSnippet: "Task({ prompt, agent?, model?, role?, readonly? }) runs a fresh pi subagent",
 			promptGuidelines: [
 				"Under poteto mode, independent work that does not need this chat's context goes to `task`, several calls per message to run them in parallel.",
@@ -359,7 +444,8 @@ export default function pstackExtension(pi: ExtensionAPI) {
 				cwd: Type.Optional(Type.String({ description: "Working directory for the delegate. Defaults to this session's cwd." })),
 				readonly: Type.Optional(Type.Boolean({ description: "Restrict the delegate to read, grep, find, ls." })),
 				tools: Type.Optional(Type.String({ description: "Explicit comma-separated tool allowlist." })),
-				timeoutSec: Type.Optional(Type.Number({ description: "Wall-clock limit. Default 1800." })),
+				timeoutSec: Type.Optional(Type.Number({ minimum: 0.1, maximum: 86400, description: "Wall-clock limit in seconds. Default 1800." })),
+				run_in_background: Type.Optional(Type.Boolean({ description: "Default true. Return task_id immediately and deliver completion automatically." })),
 				mode: Type.Optional(
 					Type.Boolean({
 						description:
@@ -368,12 +454,12 @@ export default function pstackExtension(pi: ExtensionAPI) {
 				),
 			}),
 			executionMode: "parallel",
-			execute: async (toolCallId, params, signal, onUpdate, ctx) => {
+			execute: async (_toolCallId, params, signal, onUpdate, ctx) => {
 				const root = resolveRoot();
 				const models = readModels();
 				const model = params.model?.trim() || resolveRoleModel(params.role, models);
 				const cwd = params.cwd ? path.resolve(ctx.cwd, params.cwd) : ctx.cwd;
-				const timeoutMs = Math.max(30, params.timeoutSec ?? DEFAULT_TASK_TIMEOUT_SEC) * 1000;
+				const timeoutMs = (params.timeoutSec ?? DEFAULT_TASK_TIMEOUT_SEC) * 1000;
 
 				const wantMode = params.mode ?? params.agent === "poteto-agent";
 				let brief = params.prompt.trim();
@@ -398,60 +484,35 @@ export default function pstackExtension(pi: ExtensionAPI) {
 				else if (params.tools) args.push("--tools", params.tools);
 
 				const { command } = piCommand();
-				const started = Date.now();
 				onUpdate?.({
 					content: [{ type: "text", text: `task → ${model ?? "session default"} (${params.agent ?? "delegate"})` }],
 					details: undefined,
 				});
 
-				const run = await new Promise<{ code: number | null; stdout: string; stderr: string; error?: string }>((resolve) => {
-					const child = spawn(command, args, {
-						cwd,
-						env: { ...process.env, PI_PSTACK_CHILD: "1" },
-						stdio: ["ignore", "pipe", "pipe"],
-					});
-					let stdout = "";
-					let stderr = "";
-					let settled = false;
-					const finish = (result: { code: number | null; stdout: string; stderr: string; error?: string }) => {
-						if (settled) return;
-						settled = true;
-						clearTimeout(timer);
-						resolve(result);
-					};
-					const timer = setTimeout(() => {
-						child.kill("SIGKILL");
-						finish({ code: null, stdout, stderr, error: `timed out after ${timeoutMs / 1000}s` });
-					}, timeoutMs);
-					const onAbort = () => {
-						child.kill("SIGTERM");
-						setTimeout(() => child.kill("SIGKILL"), 5000).unref?.();
-					};
-					signal?.addEventListener("abort", onAbort, { once: true });
-
-					child.stdout?.on("data", (chunk: Buffer) => {
-						stdout += chunk.toString();
-					});
-					child.stderr?.on("data", (chunk: Buffer) => {
-						stderr += chunk.toString();
-					});
-					child.on("error", (error: Error) => finish({ code: null, stdout, stderr, error: error.message }));
-					child.on("close", (code) => {
-						signal?.removeEventListener("abort", onAbort);
-						finish({ code, stdout, stderr });
-					});
+				if (closing || signal?.aborted) {
+					return { content: [{ type: "text", text: "Task cancelled before start" }], details: {}, isError: true };
+				}
+				const background = (ctx.mode === "tui" || ctx.mode === "rpc") && params.run_in_background !== false;
+				const generation = sessionGeneration;
+				const task = tasks.start({
+					command, args, cwd, timeoutMs,
+					label: `${params.agent ?? "delegate"}${model ? ` · ${model}` : ""}`,
+					env: { ...process.env, PI_PSTACK_CHILD: "1" },
+					signal: background ? undefined : signal,
 				});
-
-				const seconds = ((Date.now() - started) / 1000).toFixed(1);
-				const body = run.stdout.trim() || run.stderr.trim() || "(no output)";
-				const header = `task ${params.agent ?? "delegate"}${model ? ` · ${model}` : ""} · ${seconds}s · ${run.error ?? `exit ${run.code}`}`;
-				const text = truncate(`${header}\n\n${body}`);
-
-				return {
-					content: [{ type: "text", text }],
-					details: { toolCallId, model, role: params.role, agent: params.agent, cwd, seconds, exitCode: run.code, error: run.error },
-					isError: run.error !== undefined || run.code !== 0,
-				};
+				paintTasks(ctx);
+				if (background) {
+					void task.done.then(result => {
+						if (closing || generation !== sessionGeneration) return;
+						paintTasks(ctx);
+						pi.sendMessage({ customType: "pstack-task-result", content: taskText(result), display: true, details: { taskId: result.id, state: result.state } },
+							result.state === "cancelled" ? { triggerTurn: false } : { triggerTurn: true, deliverAs: "followUp" });
+					}).catch(error => { if (generation === sessionGeneration) ctx.ui.notify(`Task report delivery failed: ${String(error)}`, "error"); });
+					return { content: [{ type: "text", text: `Started background task ${task.result.id}. Continue independent work; its result will arrive automatically. Use task_status or task_cancel with this task_id.` }], details: { taskId: task.result.id, state: task.result.state } };
+				}
+				const result = await task.done;
+				paintTasks(ctx);
+				return taskReply(result);
 			},
 		});
 	}

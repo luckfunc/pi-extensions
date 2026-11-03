@@ -29,7 +29,11 @@
     ]
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "typebox": "*"
+    "@earendil-works/pi-coding-agent": ">=1.5.0",
+    "typebox": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "scripts": {
+    "test": "node --test tests/task-manager.test.ts tests/extension.test.ts"
   }
 }

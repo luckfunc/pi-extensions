@@ -49,7 +49,7 @@ Any skill is also directly runnable: `/skill:how`, `/skill:why`, `/skill:interro
 Cursor's `Task` tool becomes `task`:
 
 ```text
-task({ prompt, agent?, model?, role?, readonly?, cwd?, timeoutSec? })
+task({ prompt, agent?, model?, role?, readonly?, cwd?, timeoutSec?, run_in_background? })
 ```
 
 - `agent: "poteto-agent"` prepends the code-delegate brief, `agent: "comment-sicko"` the comment-review brief. Both live in `roles/`.
@@ -57,7 +57,13 @@ task({ prompt, agent?, model?, role?, readonly?, cwd?, timeoutSec? })
 - `readonly: true` restricts the delegate to `read`, `grep`, `find`, `ls`.
 - `mode` injects poteto mode into the delegate. It defaults to on for `agent: "poteto-agent"` and off for everything else, so a reviewer skill keeps its own clean context.
 - Each call is a headless `pi -p` run in the repo: separate context, separate model, no session file left behind.
-- Fan out by putting several `task` calls in one message. pi runs them in parallel, which is what `swarm`, `arena`, `interrogate`, and `reflect` need.
+- Interactive/RPC calls default to `run_in_background: true`: return a task ID immediately, then deliver the final report and wake the parent automatically. Set it to `false` to wait inside the tool call. One-shot print/JSON sessions always wait so work is not lost when the parent exits.
+- Fan out with several `task` calls. `task_status({ task_id? })` lists tasks or returns one task's output; `task_cancel({ task_id })` cancels one, or pass `"all"`. Do not busy-poll; completion is delivered automatically.
+- **Esc cancels all active pstack tasks in this interactive session**, including background tasks when the parent is idle. Pi's normal Esc handling still runs. Cancellation reports do not restart the parent.
+- `/tasks` lists IDs and states; `/tasks <id>` displays output; `/tasks cancel <id|all>` stops work without needing a model call.
+- Quit, reload, and session replacement cancel active tasks. This uses the Pi 1.5.0 session lifecycle API; update Pi before using this adapter.
+- Cancellation first gives Pi 750 ms for graceful cleanup, then kills task-owned process groups, including separately grouped tool descendants discovered before shutdown. Process-tree discovery requires `ps`; failures appear in the task report rather than silently claiming full cleanup. Already orphaned/daemonized processes cannot always be attributed to a task.
+- States are `running`, `cancelling`, `completed`, `failed`, `cancelled`, and `timed_out`. The registry is session-local; it keeps up to 100 tasks and bounded output (the most recent 60,000 characters per stream). Task IDs are not resumable across reloads. Print-mode Pi may buffer output until completion.
 - `task` is registered whether or not the mode is on, so you can delegate from a plain session too.
 
 ## Settings
@@ -79,7 +85,8 @@ task({ prompt, agent?, model?, role?, readonly?, cwd?, timeoutSec? })
 ## Layout
 
 ```text
-extensions/pstack-mode.ts   sticky mode, /pstack, task tool
+extensions/pstack-mode.ts   sticky mode, commands and task tools
+extensions/task-manager.ts  task registry, process lifecycle and cancellation
 skills/                     ported skills, unchanged apart from frontmatter
 roles/                      delegate briefs for the task tool
 PORTING.md                  what changed from upstream, and the gaps
@@ -94,3 +101,13 @@ Run the offline sync regression check with `python3 scripts/test-sync-upstream.p
 ## Credits
 
 pstack is by Lauren Tan ([poteto](https://x.com/poteto)), MIT licensed. This package only adapts it to pi.
+
+## Lifecycle regression checks
+
+With peer dependencies installed and Node 22.18+ (native TypeScript stripping):
+
+```sh
+node --test tests/task-manager.test.ts tests/extension.test.ts
+```
+
+Tests use local fake workers, never a model/API. Run outside a sandbox that blocks `ps` to verify descendant cleanup. `tests/tui-fixture.ts` adds `/test-pstack-cancel` for manual Esc verification; load it only in a temporary test profile with `PI_PSTACK_PI_BIN` pointing to `tests/fake-pi.mjs`.
