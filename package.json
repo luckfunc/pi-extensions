@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Pi plugins: a colored input prefix and pstack engineering workflows.",
+  "description": "Pi plugins: a colored input prefix, pstack workflows, and OpenAI Fast mode.",
   "keywords": ["pi-package"],
   "repository": {
     "type": "git",
@@ -12,7 +12,8 @@
   "pi": {
     "extensions": [
       "./plugins/prompt-prefix/extensions/prompt-prefix.js",
-      "./plugins/pstack/extensions/pstack-mode.ts"
+      "./plugins/pstack/extensions/pstack-mode.ts",
+      "./plugins/openai-fast/extensions/openai-fast.ts"
     ],
     "skills": ["./plugins/pstack/skills"]
   },

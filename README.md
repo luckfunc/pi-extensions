@@ -5,6 +5,8 @@ Pi 插件集合。
 - [prompt-prefix](plugins/prompt-prefix) 给输入框加上青色 `❯` 前缀，需要设置 `editorPaddingX: 2`。
 - [pstack](plugins/pstack) 将 [Cursor pstack](https://github.com/cursor/plugins/tree/main/pstack) 适配到 Pi，支持持续启用的工程工作模式和子代理。
 
+- [openai-fast](plugins/openai-fast) 为 OpenAI Codex 提供 `/fast` 和 `/ultrafast` 手动开关，底栏显示当前加速档位。
+
 ## 安装全部
 
 ```sh
@@ -30,6 +32,12 @@ pi install ./plugins/prompt-prefix
 
 ```sh
 pi install ./plugins/pstack
+```
+
+或者，只安装 OpenAI Fast。
+
+```sh
+pi install ./plugins/openai-fast
 ```
 
 全量安装和单独安装二选一，避免重复加载。单独安装后请保留克隆的目录，Pi 直接从该目录加载插件。

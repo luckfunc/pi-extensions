@@ -1,0 +1,14 @@
+{
+  "name": "pi-openai-fast",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Manual Fast mode for supported OpenAI Codex models in Pi.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./extensions/openai-fast.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
