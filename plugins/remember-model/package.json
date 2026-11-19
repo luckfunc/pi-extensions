@@ -1,0 +1,14 @@
+{
+  "name": "pi-remember-model",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Remember the last interactively selected Pi model for future sessions.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./extensions/remember-model.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
